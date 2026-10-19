@@ -304,6 +304,8 @@ a:focus-visible,button:focus-visible,[tabindex]:focus-visible{outline:3px solid 
 .ico.photo img{width:100%;height:100%;object-fit:cover}
 .ico.photo.logo{width:84px;height:84px;padding:4px;background:var(--cream);border-radius:14px}
 .ico.photo.logo img{object-fit:contain}
+.ico.photo.fit{display:block;width:56px;height:56px;padding:4px;background:var(--cream)}
+.ico.photo.fit img{object-fit:contain}
 .link:hover .ico{transform:rotate(-6deg) scale(1.05)}
 .txt{flex:1;min-width:0;text-align:left}
 .t{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;font:800 19.5px/1.08 var(--display);font-stretch:74%;letter-spacing:.01em;text-transform:uppercase;overflow-wrap:break-word;hyphens:auto}
@@ -530,7 +532,8 @@ const PAGE = {
     {
       title: "Things I've built",
       links: [
-        { title: "Chrome extension",            sub: "Pokémon widgets in your browser — watch the build", icon: "puzzle", color: "forest",  url: "https://www.instagram.com/p/DdmQog3JA7l/", nap: "snorlax" },
+        { title: "Pokémon Pet widget",          sub: "A tiny Pokémon pal that lives in your browser — watch the build", icon: "widget", color: "forest",  img: "squirtle", fit: true, pixel: true, url: "https://www.instagram.com/p/DdmQog3JA7l/", nap: "snorlax" },
+        { title: "GameBoy emulator",            sub: "Retro handheld games, right in your browser — watch the build", icon: "pad", color: "rust", img: "gbcPikachu", fit: true, url: "https://www.instagram.com/reel/DeecC0nJJ_Z/?srtk=aXowcHZ2aXYzanhy" },
       ],
     },
   ],
@@ -688,7 +691,7 @@ $("#sections").innerHTML = PAGE.sections
     ${sec.links.map((l) => {
       const [c, fg] = COLORS[l.color] || COLORS.rust;
       const tile = l.img
-        ? `<span class="ico photo${l.logo ? " logo" : ""}"><img src="${esc(imgSrc(l.img))}" alt="" loading="lazy"></span>`
+        ? `<span class="ico photo${l.logo ? " logo" : ""}${l.fit ? " fit" : ""}"><img${l.pixel ? ' class="px-art"' : ""} src="${esc(imgSrc(l.img))}" alt="" loading="lazy"></span>`
         : `<span class="ico" style="--c:${c};--fg:${fg}">${svg(l.icon)}</span>`;
       const hl = l.highlight;
       const crowd = (l.crowd || []).filter((c) => IMAGES[c]);
