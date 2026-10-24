@@ -138,8 +138,45 @@ function romTitle(bytes) {
 const looksLikeRom = (bytes) => bytes.length >= 0x150
   && bytes[0x104] === 0xce && bytes[0x105] === 0xed && bytes[0x106] === 0x66 && bytes[0x107] === 0x66;
 
+// ROMs usually arrive zipped, especially on phones. This pulls the first
+// .gb / .gbc out of a .zip (stored or deflated), or returns null.
+async function unzipRom(zip) {
+  const bytes = new Uint8Array(await zip.arrayBuffer());
+  const view = new DataView(bytes.buffer);
+  // The central directory's end record sits in the last 22 bytes plus any comment.
+  let end = -1;
+  for (let i = bytes.length - 22; i >= Math.max(0, bytes.length - 0x10016); i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { end = i; break; }
+  }
+  if (end < 0) return null;
+  let at = view.getUint32(end + 16, true);
+  for (let n = view.getUint16(end + 10, true); n > 0; n--) {
+    if (view.getUint32(at, true) !== 0x02014b50) return null;
+    const method = view.getUint16(at + 10, true);
+    const size = view.getUint32(at + 20, true);
+    const nameLength = view.getUint16(at + 28, true);
+    const local = view.getUint32(at + 42, true);
+    const path = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
+    at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
+    const name = path.split('/').pop();
+    if (!/\.gbc?$/i.test(name) || name.startsWith('._')) continue;
+    const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
+    const data = bytes.subarray(start, start + size);
+    if (method === 0) return new File([data], name);
+    if (method !== 8) return null;
+    const inflated = new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+    return new File([await new Response(inflated).arrayBuffer()], name);
+  }
+  return null;
+}
+
 async function addRom(file) {
-  if (!/\.gbc?$/i.test(file.name)) return alertScreen('Pick a .gb or .gbc file');
+  if (/\.zip$/i.test(file.name)) {
+    const inner = await unzipRom(file);
+    if (!inner) return alertScreen('No .gb or .gbc file in that zip');
+    file = inner;
+  }
+  if (!/\.gbc?$/i.test(file.name)) return alertScreen('Pick a .gb, .gbc or .zip file');
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!looksLikeRom(bytes)) return alertScreen('Not a Game Boy ROM');
   if (isBuiltIn(file.name)) return switchGame(file.name);
@@ -147,6 +184,7 @@ async function addRom(file) {
   games = [...games.filter((g) => g.file !== entry.file), entry];
   await storage.set({ games, [romKey(entry.file)]: toBase64(bytes) });
   switchGame(entry.file);
+  alertScreen(`Loaded ${entry.name}`);
 }
 
 async function removeRom(game) {
@@ -162,17 +200,15 @@ async function removeRom(game) {
   showScreen();
 }
 
-// Shown on the no-cartridge screen, which a ROM problem should explain.
+// Shown over the bottom of the screen for a few seconds, whatever is on it.
+const toast = document.getElementById('toast');
+let toastTimer = null;
 function alertScreen(text) {
-  noGameHint.textContent = text;
-  noGameHint.classList.add('show');
-  setTimeout(() => {
-    noGameHint.textContent = NO_GAME_HINT;
-    noGameHint.classList.remove('show');
-  }, 3000);
+  toast.textContent = text;
+  toast.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.hidden = true; }, 3000);
 }
-const noGameHint = noGame.querySelector('small');
-const NO_GAME_HINT = noGameHint.textContent;
 
 romInput.addEventListener('change', () => {
   const [file] = romInput.files;
@@ -653,31 +689,36 @@ function setSkin(name) {
   skinImg.src = asset(`skins/${name}.jpg`);
   // The sideways layout crops its pieces out of the skin (see .wide in popup.css).
   // img.src reads back absolute, so the url() means the same wherever it's used.
-  shell.style.setProperty('--skin', `url("${skinImg.src}")`);
+  // Set on the root so the web page's Skin button can show it too.
+  document.documentElement.style.setProperty('--skin', `url("${skinImg.src}")`);
   document.querySelectorAll('.swatch').forEach((el) => {
     el.setAttribute('aria-pressed', el.dataset.skin === name);
   });
   savePrefs();
 }
 
-// The sideways layout's body is plain plastic in the skin's colour, averaged
-// from a blank patch of the lower shell (between B and Select).
+// On the web page everything around the shell, and the sideways layout's
+// body, is plain plastic in the skin's colour: averaged from a strip along the
+// shell's left edge, where the photo fades into it.
 skinImg.addEventListener('load', () => {
   if (!STANDALONE) return;
   const canvas = document.createElement('canvas');
-  canvas.width = 26;
-  canvas.height = 10;
+  canvas.width = 6;
+  canvas.height = 40;
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
   const kx = skinImg.naturalWidth / 1076;
   const ky = skinImg.naturalHeight / 1845;
-  ctx.drawImage(skinImg, 380 * kx, 1380 * ky, 260 * kx, 100 * ky, 0, 0, canvas.width, canvas.height);
+  ctx.drawImage(skinImg, 14 * kx, 400 * ky, 30 * kx, 1100 * ky, 0, 0, canvas.width, canvas.height);
   const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
   const rgb = [0, 1, 2].map((c) => {
     let sum = 0;
     for (let i = c; i < data.length; i += 4) sum += data[i];
     return Math.round(sum / (data.length / 4));
   });
-  shell.style.setProperty('--plastic', `rgb(${rgb.join(' ')})`);
+  const plastic = `rgb(${rgb.join(' ')})`;
+  document.documentElement.style.setProperty('--plastic', plastic);
+  // Safari tints its own bars to match.
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', plastic);
 });
 
 function renderSkinPicker() {
@@ -722,7 +763,8 @@ function haptic() {
 
 function renderHaptics() {
   hapticsBtn.hidden = !TOUCH;
-  hapticsBtn.textContent = prefs.haptics ? 'Haptics on' : 'Haptics off';
+  hapticsBtn.textContent = 'Haptics';
+  hapticsBtn.title = prefs.haptics ? 'Haptics on: buzz on every button press' : 'Haptics off';
   hapticsBtn.setAttribute('aria-pressed', prefs.haptics);
 }
 
@@ -872,25 +914,42 @@ if (window.parent !== window) {
   window.addEventListener('resize', fitToFrame);
 }
 
-// The web page zooms the shell to fill the window. When upright would leave
-// the game screen small (a phone on its side, a foldable opened out), the
-// shell is laid out sideways instead, the screen between the controls.
-// Sizes are the unzoomed layout in CSS px; screen is the game screen's width.
-const UPRIGHT = { width: 300, height: 300 * 1845 / 1076, screen: 300 * 0.579 };
-const SIDEWAYS = { width: 1858 * 300 / 1076, height: 1000 * 300 / 1076, screen: 623 * 300 / 1076 };
+// The web page scales the shell to fill the window, edge to edge, with the
+// page itself in the shell's plastic. When upright would leave the game
+// screen small (a phone on its side, a foldable opened out), the shell is
+// laid out sideways instead, the screen between the controls.
+// Sizes are the unscaled layout in CSS px; screen is the game screen's width;
+// fill is how much of the width should show (the upright photo's outer 1% a
+// side is rim, so it runs off the screen's edges).
+const UPRIGHT = { width: 300, height: 300 * 1845 / 1076, screen: 300 * 0.579, fill: 0.98 };
+const SIDEWAYS = { width: 1858 * 300 / 1076, height: 1000 * 300 / 1076, screen: 623 * 300 / 1076, fill: 1 };
+
+// Room the bar under the shell takes, with the gap above it.
+const controlsHeight = () => {
+  const bar = document.getElementById('controls');
+  return bar.hidden ? 0 : bar.offsetHeight + parseFloat(getComputedStyle(document.body).rowGap || 0);
+};
 
 function fitToWindow() {
   const pad = getComputedStyle(document.body);
   const width = document.body.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
   const height = document.body.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
-  const zoomFor = (layout) => Math.min(width / layout.width, height / layout.height);
+  const zoomFor = (layout) => Math.min(width / (layout.width * layout.fill), (height - controlsHeight()) / layout.height);
   const upright = zoomFor(UPRIGHT) * UPRIGHT.screen;
   const sideways = zoomFor(SIDEWAYS) * SIDEWAYS.screen;
   // Upright is the real thing, so keep it until its screen drops under 240px
   // and sideways would be clearly bigger.
   const wide = upright < 240 && sideways > upright * 1.3;
   shell.classList.toggle('wide', wide);
-  shell.style.zoom = zoomFor(wide ? SIDEWAYS : UPRIGHT);
+  // A transform, not CSS zoom: Safari lays out a frame inside zoom bigger than
+  // its box, which crops the game. The margins give the layout the scaled size.
+  const layout = wide ? SIDEWAYS : UPRIGHT;
+  const zoom = zoomFor(layout);
+  shell.style.transform = `scale(${zoom})`;
+  shell.style.marginRight = `${layout.width * (zoom - 1)}px`;
+  shell.style.marginBottom = `${layout.height * (zoom - 1)}px`;
+  shell.style.setProperty('--z', zoom);
+  shell.style.setProperty('--iz', 1 / zoom);
 }
 if (STANDALONE) {
   fitToWindow();
@@ -943,11 +1002,26 @@ const tray = document.querySelector('.tray');
 let touching = false;
 window.addEventListener('pointerdown', (e) => {
   touching = e.pointerType !== 'mouse';
-  if (touching && !e.target.closest('.tray')) tray.classList.remove('open');
+  if (!e.target.closest('.tray, #more')) tray.classList.remove('open');
 }, true);
 window.addEventListener('click', (e) => {
+  if (state.off) boot(); // in case a browser sent the click but no pointerup
   if (touching && e.target === tray) tray.classList.toggle('open');
 }, true);
+
+// The web page's bar under the shell: Load ROM (a direct tap, which iOS needs
+// to open the file picker), Skin, Web and Haptics, and More for the rest of
+// the toolbar. The extension keeps all of it on the shell's bottom edge.
+if (STANDALONE) {
+  document.getElementById('controls').hidden = false;
+  document.getElementById('more').before(modeBtn, hapticsBtn);
+  fitToWindow();
+}
+document.getElementById('load-rom').addEventListener('click', () => romInput.click());
+document.getElementById('skin-next').addEventListener('click', () => {
+  setSkin(SKINS[(SKINS.indexOf(prefs.skin) + 1) % SKINS.length]);
+});
+document.getElementById('more').addEventListener('click', () => tray.classList.toggle('open'));
 
 document.addEventListener('keydown', (e) => {
   wakeAudio();

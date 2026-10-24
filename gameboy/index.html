@@ -38,7 +38,9 @@
         <canvas id="no-game-art" width="498" height="280"></canvas>
         <small>Click to load a ROM</small>
       </button>
-      <input type="file" id="rom-input" accept=".gb,.gbc" hidden>
+      <input type="file" id="rom-input" accept=".gb,.gbc,.zip" hidden>
+      <!-- A short message over the bottom of the screen, e.g. why a ROM didn't load. -->
+      <div class="toast" id="toast" role="status" hidden></div>
       <!-- The web build starts switched off: a page may only make sound after a
            tap or key press, so the first one turns it on. -->
       <div class="power" id="power" hidden>
@@ -105,6 +107,14 @@
       </div>
       <input type="file" id="save-input" accept=".sav,.srm" hidden>
     </div>
+  </div>
+
+  <!-- Web page only: the controls people reach for most, in view under the
+       shell. popup.js moves the Web and Haptics buttons in here too. -->
+  <div class="controls" id="controls" hidden>
+    <button class="primary" id="load-rom" title="Load a .gb, .gbc or zipped ROM from this device">Load ROM</button>
+    <button id="skin-next" title="Next skin" aria-label="Next skin"><span class="dot" id="skin-dot"></span>Skin</button>
+    <button id="more" title="Games, saves, boot animation and full screen">More</button>
   </div>
 
   <!-- Sits in the transparent corner the shell's curve leaves free. -->

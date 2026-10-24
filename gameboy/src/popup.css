@@ -134,8 +134,19 @@ body {
   opacity: 0;
   transition: opacity 0.15s;
 }
-.no-game:hover small,
-.no-game small.show { opacity: 1; }
+.no-game:hover small { opacity: 1; }
+.toast {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  padding: 3px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.78);
+  color: #fff;
+  font: 8px/1.35 "Helvetica Neue", Arial, sans-serif;
+  text-align: center;
+}
 [hidden] { display: none !important; }
 
 button {
@@ -377,25 +388,115 @@ html:fullscreen .grip { display: none; }
 /* ---------- Web page ---------- */
 
 /* index.html is this page marked class="standalone" (scripts/build-web.sh).
-   The shell sits centred in the window and popup.js zooms it to fit. The body
-   is fixed so iOS can't rubber-band or scroll it. */
+   The whole screen is the Game Boy: the page is the skin's plastic (--plastic,
+   set by popup.js), the shell runs edge to edge at the top, and the control
+   bar sits at the bottom. The body is fixed so iOS can't rubber-band it. */
 .standalone {
   height: 100%;
-  background: #131316;
+  background: var(--plastic, #131316);
   touch-action: none;
 }
 .standalone body {
   position: fixed;
   inset: 0;
   width: auto;
-  display: grid;
-  place-items: center;
-  /* Clear of the notch, the Dynamic Island and the home indicator. */
-  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
-  background: radial-gradient(ellipse at 50% 40%, #2a2a31, #131316 70%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  row-gap: 10px;
+  /* The plastic runs under the notch, the Dynamic Island and the home
+     indicator; the shell and controls stay clear of them. */
+  padding: max(4px, env(safe-area-inset-top)) env(safe-area-inset-right)
+    max(10px, env(safe-area-inset-bottom)) env(safe-area-inset-left);
+  background: var(--plastic, #131316);
 }
-.standalone .gameboy { cursor: default; }
+/* popup.js scales it from the top-left corner (fitToWindow). */
+.standalone .gameboy {
+  flex: none;
+  cursor: default;
+  transform-origin: 0 0;
+  clip-path: none;
+}
+/* The photo's own outline (rim, rounded corners, black outside the bottom
+   curve) would show against the plastic around it, so its edges fade into
+   that plastic. Toolbar and saves panel stay above the fade. */
+.standalone .gameboy:not(.wide)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, var(--plastic) 0.8%, transparent 3.2%),
+    linear-gradient(to top, var(--plastic) 5%, transparent 9%),
+    linear-gradient(to right, var(--plastic) 0.7%, transparent 2.6%),
+    linear-gradient(to left, var(--plastic) 0.7%, transparent 2.6%);
+}
+/* Under the fade's solid parts the photo is trimmed away, or its dark rim
+   bleeds through as a line where the scaled edge is anti-aliased. */
+.standalone .gameboy:not(.wide) .skin { clip-path: inset(0.8% 0.7% 5% 0.7%); }
+.standalone .tray,
+.standalone .saves { z-index: 1; }
+/* The bar's More button opens the toolbar here. */
+.standalone .tray::after { display: none; }
+/* The sideways body is the same plastic as the page, so it has no edge. */
+.standalone .gameboy.wide {
+  border-radius: 0;
+  box-shadow: none;
+}
+/* The game's frame is laid out at full size and scaled back down inside the
+   scaled shell, so the emulator renders sharp. */
+.standalone #emu {
+  inset: 0 auto auto 0;
+  width: calc(100% * var(--z, 1));
+  height: calc(100% * var(--z, 1));
+  transform: scale(var(--iz, 1));
+  transform-origin: 0 0;
+}
+
+/* The bar at the bottom (popup.js shows it and fits the shell around it):
+   dark rubber-ish pills that read on every skin colour. */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 7px;
+  max-width: calc(100% - 16px);
+  margin-top: auto;
+}
+.controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 0 12px;
+  border-radius: 20px;
+  background: rgba(0, 0, 0, 0.34);
+  color: #f2f2f4;
+  font: 600 13px/1 "Helvetica Neue", Arial, sans-serif;
+}
+.controls button:hover { background: rgba(0, 0, 0, 0.44); }
+.controls button:active { background: rgba(0, 0, 0, 0.54); }
+.controls button:focus-visible { outline: 2px solid #f2f2f4; outline-offset: 2px; }
+.controls .primary { background: #f2f2f4; color: #17171b; }
+.controls .primary:hover { background: #fff; }
+/* Haptics shows its state as a lit or unlit dot. */
+.controls #haptics::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6be38f;
+}
+.controls #haptics[aria-pressed="false"] { color: rgba(242, 242, 244, 0.6); }
+.controls #haptics[aria-pressed="false"]::before { background: transparent; box-shadow: inset 0 0 0 1.5px currentColor; }
+/* The current skin's plastic, cut from the skin like the toolbar swatches. */
+.controls .dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--skin) 3% 55% / 1200% auto;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3);
+}
 .standalone .grip,
 .standalone #close { display: none; }
 
