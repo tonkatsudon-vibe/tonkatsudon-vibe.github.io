@@ -926,18 +926,16 @@ if (window.parent !== window) {
 const UPRIGHT = { width: 300, height: 300 * 1845 / 1076, screen: 300 * 0.579, fill: 0.92, fillHeight: 0.93 };
 const SIDEWAYS = { width: 1858 * 300 / 1076, height: 1000 * 300 / 1076, screen: 623 * 300 / 1076, fill: 1, fillHeight: 0.94 };
 
-// Room the bar at the bottom takes, with a gap above it.
-const controlsHeight = () => {
-  const bar = document.getElementById('controls');
-  return bar.hidden ? 0 : bar.offsetHeight + 10;
-};
-
 function fitToWindow() {
   const pad = getComputedStyle(document.body);
+  const top = parseFloat(pad.paddingTop);
   const width = document.body.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
-  const height = document.body.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
-  const zoomFor = (layout) => Math.min(width / (layout.width * layout.fill),
-    (height - controlsHeight()) / (layout.height * layout.fillHeight));
+  // The shell's controls end above the bar, which floats over the plastic at
+  // the bottom; its plain bottom edge may run on underneath.
+  const bar = document.getElementById('controls');
+  const bottom = bar.hidden ? document.body.clientHeight - parseFloat(pad.paddingBottom) : bar.offsetTop - 10;
+  const height = bottom - top;
+  const zoomFor = (layout) => Math.min(width / (layout.width * layout.fill), height / (layout.height * layout.fillHeight));
   const upright = zoomFor(UPRIGHT) * UPRIGHT.screen;
   const sideways = zoomFor(SIDEWAYS) * SIDEWAYS.screen;
   // Upright is the real thing, so keep it until its screen drops under 240px
@@ -953,6 +951,9 @@ function fitToWindow() {
   shell.style.marginBottom = `${layout.height * (zoom - 1)}px`;
   shell.style.setProperty('--z', zoom);
   shell.style.setProperty('--iz', 1 / zoom);
+  // The More toolbar opens at the shell's bottom edge: lift it clear of the bar.
+  const overlap = top + layout.height * zoom - bottom;
+  shell.style.setProperty('--lift', `${Math.max(0, overlap / zoom)}px`);
 }
 if (STANDALONE) {
   fitToWindow();

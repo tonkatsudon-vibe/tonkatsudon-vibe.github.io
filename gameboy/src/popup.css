@@ -436,8 +436,10 @@ html:fullscreen .grip { display: none; }
 .standalone .gameboy:not(.wide) .skin { clip-path: inset(0.8% 0.7% 5% 0.7%); }
 .standalone .tray,
 .standalone .saves { z-index: 1; }
-/* The bar's More button opens the toolbar here. */
+/* The bar's More button opens the toolbar here, lifted clear of the bar
+   (--lift, set by popup.js). */
 .standalone .tray::after { display: none; }
+.standalone .toolbar { bottom: calc(12px + var(--lift, 0px)); }
 /* The sideways body is the same plastic as the page, so it has no edge. */
 .standalone .gameboy.wide {
   border-radius: 0;
@@ -459,7 +461,7 @@ html:fullscreen .grip { display: none; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: max(10px, env(safe-area-inset-bottom));
+  bottom: 4px;
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
@@ -484,10 +486,16 @@ html:fullscreen .grip { display: none; }
   width: 40px;
   padding: 0;
 }
-/* Narrow phones (iPhone SE, mini) still get the whole bar on one row. */
-@media (max-width: 389px) {
+/* Narrower phones (iPhone SE, mini, the 390–393px models) still get the
+   whole bar on one row. */
+@media (max-width: 401px) {
   .controls { gap: 4px; }
   .controls button { padding: 0 7px; font-size: 12px; }
+}
+@media (max-width: 370px) {
+  .controls { gap: 3px; }
+  .controls button { padding: 0 5px; font-size: 11px; }
+  .controls .icon { width: 34px; }
 }
 /* Idle, the buttons fade out (popup.js) and a handle marks where to tap, or
    hover, to bring them back. The bar keeps its room, so nothing moves. */
