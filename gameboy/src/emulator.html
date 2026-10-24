@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- GameBoy Plugin by Tonkatsudon. MIT License, see LICENSE. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>GameBoy Plugin by Tonkatsudon: screen</title>
+  <!-- Sandboxed (see manifest "sandbox"): the only place an MV3 extension may
+       run EmulatorJS, which loads its code from a CDN and compiles the core
+       from a blob. popup.js hands it the ROM and drives its buttons. -->
+  <style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    #game { width: 100%; height: 100%; }
+    /* The shell is the controller: hide EmulatorJS's own toolbar, touch pad,
+       menus and toasts so only the picture shows on the tiny screen. */
+    .ejs_menu_bar, .ejs_virtualGamepad_parent, .ejs_virtualGamepad_open, .ejs_context_menu,
+    .ejs_message, .ejs_popup_container, .ejs_settings_parent { display: none !important; }
+    .ejs_loading_text { font-size: 9px !important; }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <script src="emulator.js"></script>
+</body>
+</html>

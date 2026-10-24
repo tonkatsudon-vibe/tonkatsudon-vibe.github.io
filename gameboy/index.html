@@ -1,0 +1,116 @@
+<!doctype html>
+<!-- GameBoy Plugin by Tonkatsudon. MIT License, see LICENSE. -->
+<html lang="en" class="standalone">
+<head>
+  <meta charset="utf-8">
+  <!-- Web build only (scripts/build-web.sh adds this to popup.html). The page
+       lives at the site root but its files are in src/, as in the extension. -->
+  <base href="src/">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+  <meta name="description" content="A Game Boy Color you can play in the browser, on a phone, tablet or computer. Made by Tonkatsudon.">
+  <meta name="theme-color" content="#131316">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Tonkatsudon GB emulator">
+  <meta property="og:title" content="Tonkatsudon GB emulator">
+  <meta property="og:description" content="A Game Boy Color you can play in the browser.">
+  <link rel="manifest" href="../manifest.webmanifest">
+  <link rel="icon" href="../assets/icons/icon192.png">
+  <link rel="apple-touch-icon" href="../assets/icons/icon180.png">
+  <!-- Must match the iframe's color-scheme in overlay.js to stay transparent on dark pages. -->
+  <meta name="color-scheme" content="light">
+  <title>Tonkatsudon GB emulator</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="gameboy" id="gameboy">
+    <img class="skin" id="skin" alt="" draggable="false">
+
+    <div class="screen">
+      <img class="boot" id="boot" alt="" hidden>
+      <!-- The real game: a sandboxed EmulatorJS page (emulator.html). It never
+           takes clicks or focus; popup.js forwards the shell's buttons to it. -->
+      <iframe id="emu" title="Game" tabindex="-1" allow="autoplay *; gamepad *"></iframe>
+      <!-- What the boot ROM shows with no cartridge in: the logo reads back as
+           a black bar. Drawn by popup.js; clicking it loads a ROM. -->
+      <button class="no-game" id="no-game" title="Load a .gb / .gbc ROM" hidden>
+        <canvas id="no-game-art" width="498" height="280"></canvas>
+        <small>Click to load a ROM</small>
+      </button>
+      <input type="file" id="rom-input" accept=".gb,.gbc" hidden>
+      <!-- The web build starts switched off: a page may only make sound after a
+           tap or key press, so the first one turns it on. -->
+      <div class="power" id="power" hidden>
+        <b>Tap to turn on</b>
+        <small class="install" id="install" hidden></small>
+        <small>GameBoy by Tonkatsudon · emulation by EmulatorJS<br>
+          Demo cartridge: Tobu Tobu Girl Deluxe by Tangram Games (CC BY 4.0)</small>
+      </div>
+      <div class="web" id="web" hidden>
+        <form class="urlbar" id="urlbar">
+          <button type="button" id="web-back" title="Back (B)" aria-label="Back" disabled>&lsaquo;</button>
+          <input id="url" type="text" placeholder="Search or type a URL" spellcheck="false" autocomplete="off">
+        </form>
+        <div class="web-page">
+          <!-- No allow-top-navigation: framed sites can't navigate the page hosting the Game Boy. -->
+          <iframe id="page" title="Web page"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- One control: a thumb can roll between directions, and each corner holds two. -->
+    <div class="dpad" id="dpad">
+      <button data-key="up" class="up" aria-label="Up"></button>
+      <button data-key="left" class="left" aria-label="Left"></button>
+      <button data-key="right" class="right" aria-label="Right"></button>
+      <button data-key="down" class="down" aria-label="Down"></button>
+      <i data-keys="up left" class="up-left"></i>
+      <i data-keys="up right" class="up-right"></i>
+      <i data-keys="down left" class="down-left"></i>
+      <i data-keys="down right" class="down-right"></i>
+    </div>
+    <button data-key="b" class="round b" aria-label="B"></button>
+    <button data-key="a" class="round a" aria-label="A"></button>
+    <button data-key="select" class="pill select" aria-label="Select"></button>
+    <button data-key="start" class="pill start" aria-label="Start"></button>
+
+    <!-- Revealed when hovering the bottom edge of the shell. -->
+    <div class="tray">
+      <div class="toolbar">
+        <div class="toolbar-row">
+          <div class="skins" id="skins"></div>
+          <button class="boot-mode" id="saves-open" title="Export, import or delete save files">Saves</button>
+          <button class="boot-mode" id="fullscreen" title="Full screen (F11)">Full</button>
+          <button class="close" id="close" title="Close" aria-label="Close">&times;</button>
+        </div>
+        <div class="toolbar-row">
+          <select class="game-pick" id="game-pick" title="Pick a game" aria-label="Game"></select>
+          <button class="boot-mode" id="boot-mode" title="Switch boot animation"></button>
+          <button class="boot-mode" id="mode"></button>
+          <button class="boot-mode" id="haptics" title="Buzz under your finger on every button press" hidden></button>
+        </div>
+      </div>
+    </div>
+
+    <div class="saves" id="saves" role="dialog" aria-labelledby="saves-title" hidden>
+      <div class="saves-card">
+        <div class="saves-head">
+          <h2 id="saves-title">Save files</h2>
+          <button class="close" id="saves-close" title="Close" aria-label="Close">&times;</button>
+        </div>
+        <ul class="saves-list" id="saves-list"></ul>
+        <p class="saves-note">Importing or deleting a save restarts that game from its title screen.</p>
+      </div>
+      <input type="file" id="save-input" accept=".sav,.srm" hidden>
+    </div>
+  </div>
+
+  <!-- Sits in the transparent corner the shell's curve leaves free. -->
+  <div class="grip" id="grip" title="Drag to resize"></div>
+
+  <script src="web-storage.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,537 @@
+/* GameBoy Plugin by Tonkatsudon. MIT License, see LICENSE. */
+
+* { box-sizing: border-box; }
+
+body {
+  width: 300px;
+  margin: 0;
+  background: transparent;
+  font-family: "Helvetica Neue", Arial, sans-serif;
+  -webkit-user-select: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* Skin images are 1076×1845; every overlay below is placed in % of that. */
+.gameboy {
+  position: relative;
+  width: 300px;
+  aspect-ratio: 1076 / 1845;
+  /* Clip the black corners and dark rim baked into the skin JPGs. The radii are
+     fitted to the shell's outline: tight top corners, a wide shallow curve at the bottom. */
+  clip-path: inset(0 0.4% 0.6% 0.4% round 2% 2% 40% 40% / 2% 2% 6% 6%);
+  overflow: hidden;
+  cursor: grab;
+  /* One skin pixel, for the sideways layout (.wide) at the end of this file. */
+  --s: calc(300px / 1076);
+  /* Holding a button is gameplay: no browser panning, zooming or press-and-hold callouts. */
+  touch-action: none;
+  -webkit-touch-callout: none;
+}
+.gameboy.dragging { cursor: grabbing; }
+
+.skin {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.screen {
+  position: absolute;
+  left: 20.91%;
+  top: 8.29%;
+  width: 57.9%;
+  height: 31.06%;
+  overflow: hidden;
+  background: #000;
+}
+
+/* The boot GIFs are letterboxed 498×280; cover crops the black bars. */
+.boot,
+#emu {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.boot { object-fit: cover; }
+
+.web {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+
+.urlbar {
+  display: flex;
+  flex: none;
+  height: 16px;
+  background: #1c1c1c;
+}
+.urlbar button {
+  width: 16px;
+  color: #eee;
+  font-size: 14px;
+  line-height: 1;
+}
+.urlbar button:disabled { color: #555; cursor: default; }
+.urlbar input {
+  flex: 1;
+  min-width: 0;
+  margin: 2px 2px 2px 0;
+  padding: 0 4px;
+  border: none;
+  border-radius: 3px;
+  background: #3a3a3a;
+  color: #eee;
+  font: 9px/12px "Helvetica Neue", Arial, sans-serif;
+  outline: none;
+}
+.urlbar input:focus { background: #4a4a4a; }
+
+/* Lay the page out at 1/0.45 × the screen size, then shrink it, so sites get a
+   phone-sized ~385px viewport instead of ~175px. */
+.web-page { flex: 1; position: relative; overflow: hidden; }
+#page {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: calc(100% / 0.45);
+  height: calc(100% / 0.45);
+  border: none;
+  transform: scale(0.45);
+  transform-origin: 0 0;
+}
+#emu { position: absolute; inset: 0; border: none; pointer-events: none; visibility: hidden; }
+.no-game {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: #fff;
+}
+.no-game canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  /* Same crop as the boot GIF: cover trims its black letterbox bars. */
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+/* Hidden until hovered, so the screen looks like the real thing. */
+.no-game small {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 4px;
+  color: #fff;
+  font: 8px "Helvetica Neue", Arial, sans-serif;
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.no-game:hover small,
+.no-game small.show { opacity: 1; }
+[hidden] { display: none !important; }
+
+button {
+  cursor: pointer;
+  border: none;
+  padding: 0;
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Hotspots sit over the buttons painted on the skin and darken when pressed. */
+.dpad,
+.round,
+.pill { position: absolute; }
+
+/* popup.js marks the D-pad's arms itself: a thumb rolls between them. */
+.dpad button.pressed,
+.round:active, .round.pressed,
+.pill:active, .pill.pressed { background: rgba(0, 0, 0, 0.3); }
+
+.dpad {
+  left: 7.62%;
+  top: 58.37%;
+  width: 25.56%;
+  height: 14.91%;
+  display: grid;
+  grid-template: repeat(3, 1fr) / repeat(3, 1fr);
+}
+.up    { grid-area: 1 / 2; border-radius: 4px 4px 0 0; }
+.left  { grid-area: 2 / 1; border-radius: 4px 0 0 4px; }
+.right { grid-area: 2 / 3; border-radius: 0 4px 4px 0; }
+.down  { grid-area: 3 / 2; border-radius: 0 0 4px 4px; }
+.up-left    { grid-area: 1 / 1; }
+.up-right   { grid-area: 1 / 3; }
+.down-left  { grid-area: 3 / 1; }
+.down-right { grid-area: 3 / 3; }
+
+.round {
+  width: 12.3%;
+  height: 7.2%;
+  border-radius: 50%;
+}
+.b { left: 61.15%; top: 64.17%; }
+.a { left: 79.46%; top: 60.49%; }
+
+.pill {
+  top: 81.52%;
+  width: 9.11%;
+  height: 2.28%;
+  border-radius: 999px;
+}
+.select { left: 38.01%; }
+.start  { left: 52.42%; }
+
+/* Select and Start are slivers; give fingers more to hit than the paint. */
+@media (pointer: coarse) {
+  .pill::before { content: ""; position: absolute; inset: -120% -20%; }
+}
+
+/* Resize grip: three diagonal ridges, shown while hovering the Game Boy.
+   Divided by the page zoom so it stays grabbable when the shell is tiny. */
+.grip {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  width: calc(14px / var(--zoom, 1));
+  height: calc(14px / var(--zoom, 1));
+  cursor: nwse-resize;
+  opacity: 0;
+  transition: opacity 0.15s;
+  background: linear-gradient(135deg,
+    transparent 45%, #fff 45%, #fff 52%, transparent 52%,
+    transparent 63%, #fff 63%, #fff 70%, transparent 70%,
+    transparent 81%, #fff 81%, #fff 88%, transparent 88%);
+  filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.9));
+}
+body:hover .grip,
+.grip.dragging { opacity: 1; }
+
+/* Full screen: the shell is centred on black and can't be dragged or resized. */
+html:fullscreen {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  background: #000;
+}
+html:fullscreen .gameboy { cursor: default; }
+html:fullscreen .grip { display: none; }
+
+/* Hover zone along the bottom edge, below Select/Start. */
+.tray {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 12%;
+}
+
+.toolbar {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.75);
+  opacity: 0;
+  transform: translateY(6px);
+  pointer-events: none;
+  transition: opacity 0.15s, transform 0.15s;
+  cursor: default;
+}
+/* Touch screens can't hover: popup.js toggles .open on a tap instead. */
+@media (hover: hover) {
+  .tray:hover .toolbar {
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
+  }
+}
+.tray.open .toolbar,
+.toolbar:focus-within {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+/* A handle so touch users know the bottom edge opens something. */
+@media (hover: none) {
+  .tray::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 9px;
+    width: 34px;
+    height: 4px;
+    margin-left: -17px;
+    border-radius: 2px;
+    background: rgba(0, 0, 0, 0.28);
+  }
+  .tray.open::after { opacity: 0; }
+}
+.gameboy.dragging .toolbar { opacity: 0; pointer-events: none; }
+
+.toolbar-row { display: flex; align-items: center; gap: 8px; }
+.skins { display: flex; gap: 4px; flex: 1; }
+
+.game-pick {
+  flex: 1;
+  min-width: 0;
+  height: 18px;
+  padding: 0 4px;
+  border: none;
+  border-radius: 8px;
+  background: #555;
+  color: #eee;
+  font: 10px "Helvetica Neue", Arial, sans-serif;
+  cursor: pointer;
+}
+.game-pick:hover { background: #666; }
+
+/* Each swatch is a zoomed-in crop of the skin's shell, so its colour always matches. */
+.swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background-size: 1200%;
+  background-position: 3% 55%;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+.swatch[aria-pressed="true"] { outline-color: #eee; }
+
+.boot-mode,
+.close {
+  color: #eee;
+  font-family: inherit;
+}
+.boot-mode {
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: #555;
+  font-size: 10px;
+}
+.boot-mode:hover { background: #666; }
+.boot-mode[aria-pressed="false"] { color: #999; }
+.close {
+  width: 18px;
+  font-size: 16px;
+  line-height: 1;
+}
+.close:hover { color: #fff; }
+
+/* Save files panel, laid over the whole shell. */
+.saves {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  cursor: default;
+}
+.saves-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-height: 80%;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(20, 20, 20, 0.92);
+  color: #eee;
+  font-size: 10px;
+}
+.saves-head { display: flex; align-items: center; margin-bottom: 6px; }
+.saves-head h2 { flex: 1; margin: 0; font-size: 12px; }
+.saves-list { flex: 1; overflow-y: auto; margin: 0; padding: 0; list-style: none; }
+.saves-list li { padding: 6px 0; border-top: 1px solid #333; }
+.saves-list .name { overflow: hidden; font-weight: bold; text-overflow: ellipsis; white-space: nowrap; }
+.saves-list .meta { margin: 1px 0 4px; color: #999; font-size: 9px; }
+.saves-list .actions { display: flex; gap: 4px; }
+.saves-list .actions button {
+  padding: 2px 7px;
+  border-radius: 8px;
+  background: #555;
+  color: #eee;
+  font: 9px "Helvetica Neue", Arial, sans-serif;
+}
+.saves-list .actions button:hover:not(:disabled) { background: #666; }
+.saves-list .actions button:disabled { color: #777; cursor: default; }
+.saves-list .actions .danger { background: #8b2a2a; }
+.saves-list .actions .danger:hover:not(:disabled) { background: #a33; }
+.saves-empty { padding: 6px 0; color: #999; }
+.saves-note { margin: 6px 0 0; color: #888; font-size: 8px; }
+
+/* ---------- Web page ---------- */
+
+/* index.html is this page marked class="standalone" (scripts/build-web.sh).
+   The shell sits centred in the window and popup.js zooms it to fit. The body
+   is fixed so iOS can't rubber-band or scroll it. */
+.standalone {
+  height: 100%;
+  background: #131316;
+  touch-action: none;
+}
+.standalone body {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  display: grid;
+  place-items: center;
+  /* Clear of the notch, the Dynamic Island and the home indicator. */
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: radial-gradient(ellipse at 50% 40%, #2a2a31, #131316 70%);
+}
+.standalone .gameboy { cursor: default; }
+.standalone .grip,
+.standalone #close { display: none; }
+
+/* Switched off, waiting for the first tap. */
+.power {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 10px;
+  color: #a0a0a0;
+  font: 6px/1.5 "Helvetica Neue", Arial, sans-serif;
+  text-align: center;
+}
+.power b {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  animation: power-blink 1.6s ease-in-out infinite;
+}
+.power small { color: #6a6a6a; font-size: inherit; }
+@keyframes power-blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .power b { animation: none; }
+}
+
+/* Sideways: the same shell rearranged with the screen between the controls,
+   for a phone on its side. popup.js picks it (fitToWindow).
+   Every piece is cut from the skin (--skin, set by popup.js): --x / --y is
+   where the piece sits on the upright skin, and left / top where it goes on
+   this 1858×1000 body, both in skin pixels (--s). */
+.gameboy.wide {
+  width: calc(var(--s) * 1858);
+  aspect-ratio: 1858 / 1000;
+  clip-path: none;
+  border-radius: calc(var(--s) * 172);
+  /* The skin's plastic colour, averaged by popup.js. Until then, the skin
+     blown up far enough to be plain plastic, like the swatches. */
+  background: var(--plastic, var(--skin) 3% 55% / 1200% auto);
+  box-shadow: inset 0 calc(var(--s) * -16) calc(var(--s) * 40) rgba(0, 0, 0, 0.2),
+    inset 0 calc(var(--s) * 10) calc(var(--s) * 30) rgba(255, 255, 255, 0.15);
+}
+
+/* The skin image itself, clipped to the screen's dark surround. */
+.wide .skin {
+  inset: auto;
+  left: calc(var(--s) * 383);
+  top: calc(var(--s) * -3);
+  width: calc(var(--s) * 1076);
+  height: calc(var(--s) * 1845);
+  clip-path: inset(calc(var(--s) * 63) calc(var(--s) * 61) calc(var(--s) * 919) calc(var(--s) * 57)
+    round calc(var(--s) * 20) calc(var(--s) * 20) calc(var(--s) * 479) calc(var(--s) * 479)
+    / calc(var(--s) * 20) calc(var(--s) * 20) calc(var(--s) * 52) calc(var(--s) * 52));
+}
+.wide .screen {
+  left: calc(var(--s) * 608);
+  top: calc(var(--s) * 150);
+  width: calc(var(--s) * 623);
+  height: calc(var(--s) * 573);
+}
+
+.wide .dpad::before,
+.wide .round,
+.wide .pill {
+  background: var(--skin) calc(var(--s) * var(--x) * -1) calc(var(--s) * var(--y) * -1)
+    / calc(var(--s) * 1076) calc(var(--s) * 1845);
+}
+.wide .dpad {
+  --x: 82; --y: 1077;
+  left: calc(var(--s) * 83);
+  top: calc(var(--s) * 299);
+  width: calc(var(--s) * 275);
+  height: calc(var(--s) * 275);
+  z-index: 0;
+}
+/* The cross alone, so no square of the skin shows around it. On a layer of
+   its own: the D-pad's corners must stay touchable for diagonals. */
+.wide .dpad::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  clip-path: polygon(29.5% 0, 70.5% 0, 70.5% 29.5%, 100% 29.5%, 100% 70.5%, 70.5% 70.5%,
+    70.5% 100%, 29.5% 100%, 29.5% 70.5%, 0 70.5%, 0 29.5%, 29.5% 29.5%);
+}
+.wide .round {
+  width: calc(var(--s) * 132);
+  height: calc(var(--s) * 133);
+}
+.wide .b { --x: 658; --y: 1184; left: calc(var(--s) * 1464); top: calc(var(--s) * 404); }
+.wide .a { --x: 855; --y: 1116; left: calc(var(--s) * 1661); top: calc(var(--s) * 336); }
+.wide .pill {
+  top: calc(var(--s) * 720);
+  width: calc(var(--s) * 98);
+  height: calc(var(--s) * 42);
+}
+.wide .select { --x: 409; --y: 1504; left: calc(var(--s) * 94); }
+.wide .start  { --x: 564; --y: 1504; left: calc(var(--s) * 249); }
+/* SELECT and START moulded into the plastic under the pills. */
+.wide .pill::after {
+  content: attr(aria-label);
+  position: absolute;
+  left: 50%;
+  top: calc(100% + var(--s) * 30);
+  transform: translateX(-50%);
+  color: rgba(0, 0, 0, 0.17);
+  font: italic 700 calc(var(--s) * 34) / 1 "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-shadow: 0 calc(var(--s) * 2) 0 rgba(255, 255, 255, 0.2);
+  white-space: nowrap;
+  pointer-events: none;
+}
+/* The speaker grille under A and B: a tilted grid of holes. */
+.gameboy.wide::before {
+  content: "";
+  position: absolute;
+  left: calc(var(--s) * 1505);
+  top: calc(var(--s) * 650);
+  width: calc(var(--s) * 246);
+  height: calc(var(--s) * 246);
+  background: radial-gradient(circle, rgba(0, 0, 0, 0.78) 0 30%, transparent 34%)
+    0 0 / calc(var(--s) * 41) calc(var(--s) * 41);
+  transform: rotate(-28deg);
+  pointer-events: none;
+}
+.wide .round:active, .wide .round.pressed,
+.wide .pill:active, .wide .pill.pressed { box-shadow: inset 0 0 0 999px rgba(0, 0, 0, 0.3); }
+
+.wide .tray {
+  left: calc(50% - 150px);
+  right: auto;
+  width: 300px;
+  height: 9%;
+}
+.wide .saves-card { max-width: 300px; }
