@@ -60,7 +60,6 @@ if (STANDALONE && TOUCH && matchMedia('(display-mode: browser)').matches && navi
 }
 
 let bootTimers = [];
-let localSound = null;
 
 const asset = (path) => `../assets/${path}`;
 
@@ -539,25 +538,48 @@ function bootAudio(action, sound) {
     chrome.runtime.sendMessage({ type: 'gameboy:sound', action, sound }).catch(() => {});
     return;
   }
-  // A plain web page (no extension APIs) plays it here instead. Safari only
-  // lets a sound start inside a tap, and this one is due seconds after it, so
-  // 'prepare' (called from that tap) starts it muted, which unlocks it.
+  // A plain web page (no extension APIs) plays it here, through Web Audio.
+  // Safari only lets sound start inside a tap, and this one is due seconds
+  // later: 'prepare' (called from the tap) starts the context, and once
+  // started it may play whenever it likes.
   if (action === 'prepare') {
-    localSound?.pause();
-    const audio = (localSound = new Audio(asset(`sounds/${sound}`)));
-    audio.muted = true;
-    audio.play().then(() => {
-      if (audio.muted) { audio.pause(); audio.currentTime = 0; }
-    }).catch(() => {});
+    // Sound like a video does, even with the iPhone's silent switch on: you
+    // just turned the Game Boy on. (iOS 17+; the volume buttons still work.)
+    if (navigator.audioSession) navigator.audioSession.type = 'playback';
+    bootCtx ??= new AudioContext();
+    bootCtx.resume().catch(() => {});
+    decodedSound(sound).catch(() => {});
   } else if (action === 'play') {
-    localSound ??= new Audio(asset(`sounds/${sound}`));
-    localSound.muted = false;
-    localSound.currentTime = 0;
-    localSound.play().catch(() => {});
+    const turn = ++bootTurn;
+    decodedSound(sound).then((buffer) => {
+      if (turn !== bootTurn) return; // stopped while it was decoding
+      bootSource = bootCtx.createBufferSource();
+      bootSource.buffer = buffer;
+      bootSource.connect(bootCtx.destination);
+      bootSource.start();
+    }).catch(() => {});
   } else {
-    localSound?.pause();
-    localSound = null;
+    bootTurn++;
+    bootSource?.stop();
+    bootSource = null;
   }
+}
+let bootCtx = null;
+let bootSource = null;
+let bootTurn = 0;
+const bootBuffers = {};
+
+// Each sound is fetched and decoded once, by the time the animation wants it.
+function decodedSound(sound) {
+  bootCtx ??= new AudioContext();
+  bootBuffers[sound] ??= fetch(asset(`sounds/${sound}`))
+    .then((r) => r.arrayBuffer())
+    .then((data) => bootCtx.decodeAudioData(data))
+    .catch((err) => {
+      delete bootBuffers[sound]; // try again next boot
+      throw err;
+    });
+  return bootBuffers[sound];
 }
 
 function boot() {
@@ -993,7 +1015,8 @@ function wakeAudio() {
   if (!STANDALONE) return;
   try { emu.contentWindow?.resumeAudio?.(); } catch {}
 }
-window.addEventListener('pointerdown', wakeAudio, true);
+// (Chrome counts a mouse press as the gesture, a touch only once it lifts.)
+window.addEventListener('pointerdown', (e) => { if (e.pointerType === 'mouse') wakeAudio(); }, true);
 window.addEventListener('pointerup', () => {
   wakeAudio();
   if (state.off) boot();

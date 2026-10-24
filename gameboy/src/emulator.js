@@ -59,6 +59,8 @@ const STATE_EVERY = 2000;
       contexts.push(this);
     }
   };
+  // Like the boot sound: play through the iPhone's silent switch (iOS 17+).
+  try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
   window.resumeAudio = () => {
     if (!contexts.length && !primed) contexts.push((primed = new Native()));
     for (const ctx of contexts) if (ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
