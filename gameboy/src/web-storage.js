@@ -15,7 +15,7 @@
   // chrome.storage.get accepts null (everything), a key, a key list, or an
   // object of keys with defaults.
   const keyList = (keys) => {
-    if (keys == null) return null;.
+    if (keys == null) return null;
     if (typeof keys === 'string') return [keys];
     return Array.isArray(keys) ? keys : Object.keys(keys);
   };
