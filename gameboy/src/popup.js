@@ -919,22 +919,25 @@ if (window.parent !== window) {
 // screen small (a phone on its side, a foldable opened out), the shell is
 // laid out sideways instead, the screen between the controls.
 // Sizes are the unscaled layout in CSS px; screen is the game screen's width;
-// fill is how much of the width should show (the upright photo's outer 1% a
-// side is rim, so it runs off the screen's edges).
-const UPRIGHT = { width: 300, height: 300 * 1845 / 1076, screen: 300 * 0.579, fill: 0.98 };
-const SIDEWAYS = { width: 1858 * 300 / 1076, height: 1000 * 300 / 1076, screen: 623 * 300 / 1076, fill: 1 };
+// fill is how much of the width must show: the upright shell is cropped to the
+// middle 92%, its plain plastic margins running off the screen's edges.
+// fillHeight is how much of the height must stay clear of the control bar,
+// which floats over the plain plastic at the bottom.
+const UPRIGHT = { width: 300, height: 300 * 1845 / 1076, screen: 300 * 0.579, fill: 0.92, fillHeight: 0.93 };
+const SIDEWAYS = { width: 1858 * 300 / 1076, height: 1000 * 300 / 1076, screen: 623 * 300 / 1076, fill: 1, fillHeight: 0.94 };
 
-// Room the bar under the shell takes, with the gap above it.
+// Room the bar at the bottom takes, with a gap above it.
 const controlsHeight = () => {
   const bar = document.getElementById('controls');
-  return bar.hidden ? 0 : bar.offsetHeight + parseFloat(getComputedStyle(document.body).rowGap || 0);
+  return bar.hidden ? 0 : bar.offsetHeight + 10;
 };
 
 function fitToWindow() {
   const pad = getComputedStyle(document.body);
   const width = document.body.clientWidth - parseFloat(pad.paddingLeft) - parseFloat(pad.paddingRight);
   const height = document.body.clientHeight - parseFloat(pad.paddingTop) - parseFloat(pad.paddingBottom);
-  const zoomFor = (layout) => Math.min(width / (layout.width * layout.fill), (height - controlsHeight()) / layout.height);
+  const zoomFor = (layout) => Math.min(width / (layout.width * layout.fill),
+    (height - controlsHeight()) / (layout.height * layout.fillHeight));
   const upright = zoomFor(UPRIGHT) * UPRIGHT.screen;
   const sideways = zoomFor(SIDEWAYS) * SIDEWAYS.screen;
   // Upright is the real thing, so keep it until its screen drops under 240px
@@ -993,7 +996,25 @@ window.addEventListener('pointerdown', wakeAudio, true);
 window.addEventListener('pointerup', () => {
   wakeAudio();
   if (state.off) boot();
+  keepAwake();
 }, true);
+
+// While it's on, keep the screen from auto-locking: a locked iPhone can throw
+// the page away, and it reloads when you come back. The lock lapses whenever
+// the page is hidden, so it's asked for again on return (and on any tap, as
+// Safari may want one).
+let wakeLock = null;
+let askingWake = false;
+async function keepAwake() {
+  if (!STANDALONE || state.off || wakeLock || askingWake || document.visibilityState !== 'visible') return;
+  askingWake = true;
+  try {
+    wakeLock = await navigator.wakeLock?.request('screen');
+    wakeLock?.addEventListener('release', () => { wakeLock = null; });
+  } catch {}
+  askingWake = false;
+}
+document.addEventListener('visibilitychange', keepAwake);
 
 // Touch screens can't hover, so a tap on the bottom edge shows the toolbar
 // and a touch anywhere else hides it. Opening waits for the click: opened on
@@ -1013,15 +1034,79 @@ window.addEventListener('click', (e) => {
 // to open the file picker), Skin, Web and Haptics, and More for the rest of
 // the toolbar. The extension keeps all of it on the shell's bottom edge.
 if (STANDALONE) {
-  document.getElementById('controls').hidden = false;
+  const controls = document.getElementById('controls');
+  controls.hidden = false;
   document.getElementById('more').before(modeBtn, hapticsBtn);
-  fitToWindow();
+  // Buttons come and go (Haptics only on touch screens), so the bar's height
+  // can change after this: fit the shell around it whenever it does.
+  new ResizeObserver(fitToWindow).observe(controls);
 }
 document.getElementById('load-rom').addEventListener('click', () => romInput.click());
 document.getElementById('skin-next').addEventListener('click', () => {
   setSkin(SKINS[(SKINS.indexOf(prefs.skin) + 1) % SKINS.length]);
 });
 document.getElementById('more').addEventListener('click', () => tray.classList.toggle('open'));
+
+// Reload, after refetching the page's own files past the browser's cache: a
+// Home Screen app can otherwise keep running an old version for a while.
+// The game's save and spot are flushed first, so it picks up where it was.
+document.getElementById('reload').addEventListener('click', async () => {
+  alertScreen('Reloading…');
+  if (emuStarted) toEmu({ type: 'flush' });
+  const files = [
+    location.href.split('#')[0],
+    ...[...document.querySelectorAll('script[src]')].map((s) => s.src),
+    ...[...document.querySelectorAll('link[rel="stylesheet"]')].map((l) => l.href),
+    new URL('emulator.js', document.baseURI).href,
+  ];
+  await Promise.allSettled([
+    ...files.map((url) => fetch(url, { cache: 'reload' })),
+    new Promise((resolve) => setTimeout(resolve, 400)), // time for the flushed save to land
+  ]);
+  location.reload();
+});
+
+// Once the Game Boy is on, the bar fades away after a few idle seconds.
+// Hovering it, or tapping where it was (a handle marks the spot), brings it
+// back. It stays while the More toolbar is open or a key has focus in it.
+// (iOS keeps :hover on whatever was last tapped, so only a mouse's counts.)
+const bar = document.getElementById('controls');
+const BAR_IDLE = 3000;
+let barTimer = null;
+let barPointer = 'mouse';
+function wakeBar() {
+  bar.classList.remove('away');
+  clearTimeout(barTimer);
+  barTimer = setTimeout(() => {
+    const inUse = state.off || tray.classList.contains('open') || bar.querySelector(':focus-visible')
+      || (barPointer === 'mouse' && bar.matches(':hover'));
+    if (inUse) wakeBar();
+    else bar.classList.add('away');
+  }, BAR_IDLE);
+}
+// A tap on the hidden bar only brings it back: the button that appears under
+// the finger mustn't get that tap's click.
+// (A touch "enters" just before it goes down, so only a mouse wakes on hover.)
+let swallowClick = false;
+bar.addEventListener('pointerenter', (e) => {
+  barPointer = e.pointerType;
+  if (e.pointerType === 'mouse') wakeBar();
+});
+bar.addEventListener('pointerdown', (e) => {
+  barPointer = e.pointerType;
+  if (bar.classList.contains('away')) {
+    swallowClick = true;
+    setTimeout(() => { swallowClick = false; }, 800);
+  }
+  wakeBar();
+});
+bar.addEventListener('click', (e) => {
+  if (!swallowClick) return;
+  swallowClick = false;
+  e.stopPropagation();
+}, true);
+bar.addEventListener('focusin', wakeBar);
+if (STANDALONE) wakeBar();
 
 document.addEventListener('keydown', (e) => {
   wakeAudio();

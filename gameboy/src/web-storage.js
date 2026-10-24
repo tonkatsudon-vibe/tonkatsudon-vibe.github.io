@@ -2,9 +2,11 @@
 // MIT License, see LICENSE. Keep this notice in copies and forks.
 
 // When popup.html is served as a plain web page there is no chrome.storage.
-// Stand in for the parts popup.js uses (get / getKeys / set / remove):
-// local → IndexedDB (ROMs are too big for localStorage's quota),
-// session → sessionStorage (resume snapshots survive a reload of this tab).
+// Stand in for the parts popup.js uses (get / getKeys / set / remove), all in
+// IndexedDB (ROMs are too big for localStorage's quota). "session" holds the
+// resume snapshots; on a phone the page can be thrown away whenever the screen
+// locks or the app is closed, so they're kept for good rather than per tab,
+// and the game picks up where it was.
 // Inside the extension this file does nothing.
 
 (() => {
@@ -12,6 +14,11 @@
 
   // chrome.storage.get accepts null (everything), a key, a key list, or an
   // object of keys with defaults.
+  const keyList = (keys) => {
+    if (keys == null) return null;
+    if (typeof keys === 'string') return [keys];
+    return Array.isArray(keys) ? keys : Object.keys(keys);
+  };
   function pick(all, keys) {
     if (keys == null) return { ...all };
     if (typeof keys === 'string') keys = [keys];
@@ -52,10 +59,20 @@
     })));
   }
 
-  const readAll = () => tx('readonly', (store) => {
+  // Only the keys asked for (null: everything), so reading a pref doesn't
+  // load every stored ROM.
+  const read = (keys) => tx('readonly', (store) => {
     const result = { value: {} };
+    const wanted = keyList(keys);
     if (store === memory) {
-      for (const [k, v] of memory) result.value[k] = v;
+      for (const [k, v] of memory) if (!wanted || wanted.includes(k)) result.value[k] = v;
+      return result;
+    }
+    if (wanted) {
+      for (const k of wanted) {
+        const req = store.get(k);
+        req.onsuccess = () => { if (req.result !== undefined) result.value[k] = req.result; };
+      }
       return result;
     }
     const req = store.openCursor();
@@ -69,8 +86,8 @@
   });
 
   const local = {
-    get: async (keys) => pick(await readAll(), keys),
-    getKeys: async () => Object.keys(await readAll()),
+    get: async (keys) => pick(await read(keys), keys),
+    getKeys: async () => Object.keys(await read(null)).filter((k) => !k.startsWith(SESSION)),
     set: (items) => tx('readwrite', (store) => {
       for (const [k, v] of Object.entries(items)) store === memory ? memory.set(k, v) : store.put(v, k);
       return {};
@@ -81,31 +98,17 @@
     }),
   };
 
-  const PREFIX = 'gameboy:';
-  // Reading sessionStorage can throw too; then there's just nothing to resume.
-  function sessionAll() {
-    const all = {};
-    try {
-      for (let i = 0; i < sessionStorage.length; i++) {
-        const k = sessionStorage.key(i);
-        if (k.startsWith(PREFIX)) all[k.slice(PREFIX.length)] = JSON.parse(sessionStorage.getItem(k));
-      }
-    } catch {}
-    return all;
-  }
-
+  // The snapshots sit in the same store under their own prefix.
+  const SESSION = 'session:';
   const session = {
-    get: async (keys) => pick(sessionAll(), keys),
-    getKeys: async () => Object.keys(sessionAll()),
-    // May throw on quota; popup.js already ignores failed snapshot writes.
-    set: async (items) => {
-      for (const [k, v] of Object.entries(items)) sessionStorage.setItem(PREFIX + k, JSON.stringify(v));
+    get: async (keys) => {
+      const got = await read(keyList(keys).map((k) => SESSION + k));
+      const out = {};
+      for (const [k, v] of Object.entries(got)) out[k.slice(SESSION.length)] = v;
+      return pick(out, keys);
     },
-    remove: async (keys) => {
-      try {
-        for (const k of [].concat(keys)) sessionStorage.removeItem(PREFIX + k);
-      } catch {}
-    },
+    set: (items) => local.set(Object.fromEntries(Object.entries(items).map(([k, v]) => [SESSION + k, v]))),
+    remove: (keys) => local.remove([].concat(keys).map((k) => SESSION + k)),
   };
 
   globalThis.chrome = globalThis.chrome || {};

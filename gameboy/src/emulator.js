@@ -144,6 +144,9 @@ function load({ fileName, name, core, rom, save, state }) {
     EJS_paths: paths,
     EJS_disableDatabases: true,
     EJS_disableLocalStorage: true,
+    // popup.js takes the keys and forwards them. Served as a web page this frame
+    // is the same origin, so its own focus grab would swallow them instead.
+    EJS_noAutoFocus: true,
     EJS_onGameStart() {
       restore(save, state);
       if (paused) window.EJS_emulator.pause(true);

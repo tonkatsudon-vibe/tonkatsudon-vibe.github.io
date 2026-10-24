@@ -453,26 +453,66 @@ html:fullscreen .grip { display: none; }
   transform-origin: 0 0;
 }
 
-/* The bar at the bottom (popup.js shows it and fits the shell around it):
-   dark rubber-ish pills that read on every skin colour. */
+/* The bar at the bottom, over the shell's plain plastic (popup.js shows it and
+   fits the shell around it): dark rubber-ish pills that read on every skin. */
 .controls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  z-index: 2;
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 7px;
-  max-width: calc(100% - 16px);
-  margin-top: auto;
+  gap: 5px;
+  padding: 0 max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left));
 }
 .controls button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 40px;
-  padding: 0 12px;
+  padding: 0 8px;
   border-radius: 20px;
   background: rgba(0, 0, 0, 0.34);
   color: #f2f2f4;
   font: 600 13px/1 "Helvetica Neue", Arial, sans-serif;
+  transition: opacity 0.25s;
+}
+.controls .icon {
+  justify-content: center;
+  width: 40px;
+  padding: 0;
+}
+/* Narrow phones (iPhone SE, mini) still get the whole bar on one row. */
+@media (max-width: 389px) {
+  .controls { gap: 4px; }
+  .controls button { padding: 0 7px; font-size: 12px; }
+}
+/* Idle, the buttons fade out (popup.js) and a handle marks where to tap, or
+   hover, to bring them back. The bar keeps its room, so nothing moves. */
+.controls.away button {
+  opacity: 0;
+  pointer-events: none;
+}
+.controls::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 40px;
+  height: 5px;
+  margin: -2.5px 0 0 -20px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.28);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+.controls.away::after { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .controls button,
+  .controls::after { transition: none; }
 }
 .controls button:hover { background: rgba(0, 0, 0, 0.44); }
 .controls button:active { background: rgba(0, 0, 0, 0.54); }

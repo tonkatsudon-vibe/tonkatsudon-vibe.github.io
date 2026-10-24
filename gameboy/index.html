@@ -109,12 +109,17 @@
     </div>
   </div>
 
-  <!-- Web page only: the controls people reach for most, in view under the
-       shell. popup.js moves the Web and Haptics buttons in here too. -->
+  <!-- Web page only: the controls people reach for most, under the shell. It
+       fades away when idle. popup.js moves the Web and Haptics buttons in here. -->
   <div class="controls" id="controls" hidden>
     <button class="primary" id="load-rom" title="Load a .gb, .gbc or zipped ROM from this device">Load ROM</button>
     <button id="skin-next" title="Next skin" aria-label="Next skin"><span class="dot" id="skin-dot"></span>Skin</button>
     <button id="more" title="Games, saves, boot animation and full screen">More</button>
+    <button class="icon" id="reload" title="Reload with the latest version (your game is saved first)" aria-label="Reload">
+      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3"/><path d="M19.5 4.5v4.8h-4.8"/>
+      </svg>
+    </button>
   </div>
 
   <!-- Sits in the transparent corner the shell's curve leaves free. -->
