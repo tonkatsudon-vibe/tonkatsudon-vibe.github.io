@@ -1109,7 +1109,8 @@ function wakeBar() {
   }, BAR_IDLE);
 }
 // A tap on the hidden bar only brings it back: the button that appears under
-// the finger mustn't get that tap's click.
+// the finger mustn't get that tap's click. Each press decides for its own
+// click, since iOS may send none for a tap that makes something appear.
 // (A touch "enters" just before it goes down, so only a mouse wakes on hover.)
 let swallowClick = false;
 bar.addEventListener('pointerenter', (e) => {
@@ -1118,10 +1119,7 @@ bar.addEventListener('pointerenter', (e) => {
 });
 bar.addEventListener('pointerdown', (e) => {
   barPointer = e.pointerType;
-  if (bar.classList.contains('away')) {
-    swallowClick = true;
-    setTimeout(() => { swallowClick = false; }, 800);
-  }
+  swallowClick = bar.classList.contains('away');
   wakeBar();
 });
 bar.addEventListener('click', (e) => {

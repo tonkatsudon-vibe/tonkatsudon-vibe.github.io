@@ -461,7 +461,10 @@ html:fullscreen .grip { display: none; }
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 4px;
+  /* 4px from the bottom, except on iPhones with a home indicator: there iOS
+     keeps the strip under it for its swipe-home gesture and can swallow
+     taps, so the bar sits just above it. */
+  bottom: max(4px, calc(env(safe-area-inset-bottom, 0px) - 14px));
   z-index: 2;
   display: flex;
   flex-wrap: wrap;
