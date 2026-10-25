@@ -46,7 +46,7 @@ const modeBtn = document.getElementById('mode');
 const powerHint = document.getElementById('power');
 
 // game: the cartridge in the slot, or '' when it's been ejected.
-const prefs = { skin: 'gray', boot: 'color', mode: 'game', url: HOME, game: 'tobudx.gb', haptics: true };
+const prefs = { skin: 'gray', boot: 'color', mode: 'game', url: HOME, game: 'tobudx.gb', haptics: true, speed: 1 };
 const state = { booting: false, savesOpen: false, off: STANDALONE };
 
 if (!TOUCH) powerHint.querySelector('b').textContent = 'Click or press a key to turn on';
@@ -329,6 +329,7 @@ async function sendCartridge() {
     rom,
     save: save ? fromBase64(save) : null,
     state: snapshot ? fromBase64(snapshot) : null,
+    speed: prefs.speed,
   }, [rom]);
 }
 
@@ -778,6 +779,22 @@ bootModeBtn.addEventListener('click', () => {
   boot();
 });
 
+// How fast the game runs, like the emulator's fast forward and slow motion.
+// Each tap moves to the next speed and wraps around.
+const SPEEDS = [1, 1.5, 2, 3, 4, 0.5];
+const speedBtn = document.getElementById('speed');
+
+function renderSpeed() {
+  speedBtn.textContent = `Speed ${prefs.speed}×`;
+}
+
+speedBtn.addEventListener('click', () => {
+  prefs.speed = SPEEDS[(SPEEDS.indexOf(prefs.speed) + 1) % SPEEDS.length];
+  renderSpeed();
+  savePrefs();
+  toEmu({ type: 'speed', value: prefs.speed });
+});
+
 // A tick under the finger on every press, on touch screens. Android has
 // navigator.vibrate. iPhones don't, but Safari (iOS 18+) plays its haptic when
 // a switch control flips, so a hidden one is flipped instead.
@@ -1184,12 +1201,14 @@ Promise.all([loadPrefs(), loadGames()]).then(([saved]) => {
   if (prefs.mode === 'game' && prefs.game) loadCartridge(prefs.game);
   if (!SKINS.includes(prefs.skin)) prefs.skin = 'gray';
   if (!BOOTS[prefs.boot]) prefs.boot = 'color';
+  if (!SPEEDS.includes(prefs.speed)) prefs.speed = 1;
   if (prefs.mode !== 'web') prefs.mode = 'game';
   renderSkinPicker();
   setSkin(prefs.skin);
   renderBootMode();
   renderMode();
   renderHaptics();
+  renderSpeed();
   if (state.off) powerHint.hidden = false;
   else if (RESUME) showScreen();
   else boot();

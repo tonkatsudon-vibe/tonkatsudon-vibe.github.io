@@ -11,6 +11,7 @@
 //   → { type: 'save', game, data }           battery save changed (keep forever)
 //   → { type: 'state', game, data }          snapshot to resume after a page change
 //   ← { type: 'flush' }                      send save + state now
+//   ← { type: 'speed', value }               1 normal, above fast forward, below slow motion
 //
 // The sandbox has an opaque origin, so IndexedDB and localStorage throw here;
 // popup.js stores everything instead.
@@ -74,6 +75,26 @@ let loaded = false;
 let game = null; // echoed on save/state so a late message can't land on the next cartridge
 let paused = false;
 let lastSave = null;
+let speed = 1;
+
+// EmulatorJS's fast forward and slow motion: a ratio above 1 runs that many
+// times faster, a slow-motion ratio of 2 runs at half speed.
+function setSpeed(value) {
+  speed = value;
+  const g = gm();
+  if (!g) return;
+  g.toggleFastForward(0);
+  g.toggleSlowMotion(0);
+  g.setFastForwardRatio(Math.max(speed, 1));
+  g.setSlowMotionRatio(Math.max(1 / speed, 1));
+  // The core only reads a new ratio when the mode switches on, and switching
+  // it off and on in one go doesn't count, so turn it back on a frame later.
+  clearTimeout(setSpeed.timer);
+  setSpeed.timer = setTimeout(() => {
+    if (speed > 1) g.toggleFastForward(1);
+    if (speed < 1) g.toggleSlowMotion(1);
+  }, 50);
+}
 
 // Cheap change detector for a ~32KB SRAM buffer (FNV-1a).
 function hash(bytes) {
@@ -126,10 +147,11 @@ function restore(save, state) {
   }
 }
 
-function load({ fileName, name, core, rom, save, state }) {
+function load({ fileName, name, core, rom, save, state, speed: startSpeed = 1 }) {
   if (loaded) return; // one cartridge per frame; popup.js reloads us to swap
   loaded = true;
   game = fileName;
+  speed = startSpeed;
 
   const data = `${CDN}emulatorjs@${VERSION}/data/`;
   const lib = CORES[core];
@@ -154,6 +176,7 @@ function load({ fileName, name, core, rom, save, state }) {
     EJS_noAutoFocus: true,
     EJS_onGameStart() {
       restore(save, state);
+      setSpeed(speed); // the latest, if it changed while loading
       if (paused) window.EJS_emulator.pause(true);
       setInterval(pushSave, SAVE_EVERY);
       setInterval(() => { if (!paused) pushState(); }, STATE_EVERY);
@@ -175,6 +198,7 @@ window.addEventListener('message', (e) => {
   else if (msg.type === 'pause') { paused = true; window.EJS_emulator?.pause(true); pushState(); pushSave(); }
   else if (msg.type === 'play') { paused = false; window.EJS_emulator?.play(true); }
   else if (msg.type === 'flush') { pushSave(); pushState(); }
+  else if (msg.type === 'speed') setSpeed(msg.value);
 });
 
 post({ type: 'ready' });
