@@ -18,7 +18,9 @@
 // Pinned so an upstream release can't change behaviour under us.
 const CDN = 'https://cdn.jsdelivr.net/npm/@emulatorjs/';
 const VERSION = '4.2.3';
-const CORE_FILES = ['gambatte-wasm.data', 'gambatte-legacy-wasm.data', 'gambatte-thread-wasm.data', 'gambatte-thread-legacy-wasm.data'];
+// EmulatorJS system → the libretro core it runs (Game Boy / Color, Advance).
+const CORES = { gb: 'gambatte', gba: 'mgba' };
+const CORE_BUILDS = ['wasm', 'legacy-wasm', 'thread-wasm', 'thread-legacy-wasm'];
 const SAVE_EVERY = 4000;
 const STATE_EVERY = 2000;
 
@@ -130,11 +132,12 @@ function load({ fileName, name, core, rom, save, state }) {
   game = fileName;
 
   const data = `${CDN}emulatorjs@${VERSION}/data/`;
-  const cores = `${CDN}core-gambatte@${VERSION}/`;
+  const lib = CORES[core];
+  const cores = `${CDN}core-${lib}@${VERSION}/`;
   // The npm build has no minified bundle, so the loader logs a warning and
   // falls back to the individual source files. That's expected.
-  const paths = { 'gambatte.json': `${cores}reports/gambatte.json` };
-  for (const f of CORE_FILES) paths[f] = cores + f;
+  const paths = { [`${lib}.json`]: `${cores}reports/${lib}.json` };
+  for (const build of CORE_BUILDS) paths[`${lib}-${build}.data`] = `${cores}${lib}-${build}.data`;
 
   Object.assign(window, {
     EJS_player: '#game',

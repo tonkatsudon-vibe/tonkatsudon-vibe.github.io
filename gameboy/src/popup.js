@@ -4,10 +4,12 @@
 const KEYMAP = {
   ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right',
   z: 'b', x: 'a', Enter: 'start', Shift: 'select',
+  // The Game Boy Advance's shoulder buttons, which the shell doesn't have.
+  a: 'l', s: 'r',
 };
 
 // Libretro joypad indices, which EmulatorJS's simulateInput takes.
-const BUTTON_INDEX = { b: 0, select: 2, start: 3, up: 4, down: 5, left: 6, right: 7, a: 8 };
+const BUTTON_INDEX = { b: 0, select: 2, start: 3, up: 4, down: 5, left: 6, right: 7, a: 8, l: 10, r: 11 };
 
 const SKINS = ['gray', 'blue', 'red', 'orange', 'yellow', 'lightgreen', 'pink'];
 
@@ -91,7 +93,7 @@ const RESUME = new URLSearchParams(location.search).has('resume');
 /* ---------- Cartridges ---------- */
 
 // One freely licensed homebrew game ships in assets/cartridges/ (see the
-// LICENSE file there). Everything else is the player's own .gb/.gbc files,
+// LICENSE file there). Everything else is the player's own .gb/.gbc/.gba files,
 // kept in local storage (key rom:<file>) so every page can play them. "games"
 // lists those; saves stay keyed by file name, so reloading a removed ROM picks
 // its save back up.
@@ -123,9 +125,15 @@ function renderGamePicker() {
   gamePick.disabled = !storage;
 }
 
+// Game Boy and Color games run on gambatte, Game Boy Advance games on mGBA.
+const ROM_FILE = /\.(gbc?|gba)$/i;
+const isGba = (file) => /\.gba$/i.test(file);
+
 // The cartridge header's title (0x134-0x143), padded with zeros. Color-era
 // carts shorten it to 11 bytes and follow it with a 4-letter maker code.
-function romTitle(bytes) {
+// Game Boy Advance carts keep 12 bytes of it at 0xA0.
+function romTitle(bytes, gba) {
+  if (gba) return String.fromCharCode(...bytes.subarray(0xa0, 0xac)).replace(/[^\x20-\x7e].*$/, '').replace(/_/g, ' ').trim();
   const raw = String.fromCharCode(...bytes.subarray(0x134, 0x144));
   let title = raw.replace(/[^\x20-\x7e].*$/, '');
   if (bytes[0x143] & 0x80 && /^[A-Z0-9]{4}$/.test(raw.slice(11, 15))) title = title.slice(0, 11);
@@ -133,12 +141,13 @@ function romTitle(bytes) {
 }
 
 // Every Game Boy cartridge carries the Nintendo logo at 0x104, which the
-// boot ROM checks; its first bytes are enough to reject non-ROM files.
-const looksLikeRom = (bytes) => bytes.length >= 0x150
-  && bytes[0x104] === 0xce && bytes[0x105] === 0xed && bytes[0x106] === 0x66 && bytes[0x107] === 0x66;
+// boot ROM checks; its first bytes are enough to reject non-ROM files. A Game
+// Boy Advance header has the fixed byte 0x96 at 0xB2 instead.
+const looksLikeRom = (bytes, gba) => (gba ? bytes.length >= 0xc0 && bytes[0xb2] === 0x96 : bytes.length >= 0x150
+  && bytes[0x104] === 0xce && bytes[0x105] === 0xed && bytes[0x106] === 0x66 && bytes[0x107] === 0x66);
 
 // ROMs usually arrive zipped, especially on phones. This pulls the first
-// .gb / .gbc out of a .zip (stored or deflated), or returns null.
+// .gb / .gbc / .gba out of a .zip (stored or deflated), or returns null.
 async function unzipRom(zip) {
   const bytes = new Uint8Array(await zip.arrayBuffer());
   const view = new DataView(bytes.buffer);
@@ -158,7 +167,7 @@ async function unzipRom(zip) {
     const path = new TextDecoder().decode(bytes.subarray(at + 46, at + 46 + nameLength));
     at += 46 + nameLength + view.getUint16(at + 30, true) + view.getUint16(at + 32, true);
     const name = path.split('/').pop();
-    if (!/\.gbc?$/i.test(name) || name.startsWith('._')) continue;
+    if (!ROM_FILE.test(name) || name.startsWith('._')) continue;
     const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
     const data = bytes.subarray(start, start + size);
     if (method === 0) return new File([data], name);
@@ -172,14 +181,15 @@ async function unzipRom(zip) {
 async function addRom(file) {
   if (/\.zip$/i.test(file.name)) {
     const inner = await unzipRom(file);
-    if (!inner) return alertScreen('No .gb or .gbc file in that zip');
+    if (!inner) return alertScreen('No .gb, .gbc or .gba file in that zip');
     file = inner;
   }
-  if (!/\.gbc?$/i.test(file.name)) return alertScreen('Pick a .gb, .gbc or .zip file');
+  if (!ROM_FILE.test(file.name)) return alertScreen('Pick a .gb, .gbc, .gba or .zip file');
   const bytes = new Uint8Array(await file.arrayBuffer());
-  if (!looksLikeRom(bytes)) return alertScreen('Not a Game Boy ROM');
+  const gba = isGba(file.name);
+  if (!looksLikeRom(bytes, gba)) return alertScreen(gba ? 'Not a Game Boy Advance ROM' : 'Not a Game Boy ROM');
   if (isBuiltIn(file.name)) return switchGame(file.name);
-  const entry = { file: file.name, name: romTitle(bytes) || file.name.replace(/\.gbc?$/i, '') };
+  const entry = { file: file.name, name: romTitle(bytes, gba) || file.name.replace(ROM_FILE, '') };
   games = [...games.filter((g) => g.file !== entry.file), entry];
   await storage.set({ games, [romKey(entry.file)]: toBase64(bytes) });
   switchGame(entry.file);
@@ -315,7 +325,7 @@ async function sendCartridge() {
     name: entry?.name || game,
     // EmulatorJS has no 'gbc' system; its 'gb' core (gambatte) reads the
     // cartridge header and runs Game Boy Color games in color on its own.
-    core: 'gb',
+    core: isGba(game) ? 'gba' : 'gb',
     rom,
     save: save ? fromBase64(save) : null,
     state: snapshot ? fromBase64(snapshot) : null,
@@ -462,7 +472,7 @@ function exportSave(file, b64) {
   const url = URL.createObjectURL(new Blob([fromBase64(b64)], { type: 'application/octet-stream' }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${file.replace(/\.gbc?$/i, '')}.sav`;
+  a.download = `${file.replace(ROM_FILE, '')}.sav`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
@@ -1055,12 +1065,14 @@ window.addEventListener('click', (e) => {
 }, true);
 
 // The web page's bar under the shell: Load ROM (a direct tap, which iOS needs
-// to open the file picker), Skin, Web and Haptics, and More for the rest of
-// the toolbar. The extension keeps all of it on the shell's bottom edge.
+// to open the file picker), Skin and Haptics, and More for the rest of the
+// toolbar. The extension keeps all of it on the shell's bottom edge. The web
+// page is only for playing games, so it has no Web mode.
 if (STANDALONE) {
   const controls = document.getElementById('controls');
   controls.hidden = false;
-  document.getElementById('more').before(modeBtn, hapticsBtn);
+  modeBtn.remove();
+  document.getElementById('more').before(hapticsBtn);
   // Buttons come and go (Haptics only on touch screens), so the bar's height
   // can change after this: fit the shell around it whenever it does.
   new ResizeObserver(fitToWindow).observe(controls);
@@ -1143,7 +1155,7 @@ document.addEventListener('keydown', (e) => {
   if (key && !isTyping(e)) {
     e.preventDefault();
     if (e.repeat) return; // held keys stay held in the emulator
-    buttonFor(key).classList.add('pressed');
+    buttonFor(key)?.classList.add('pressed');
     press(key);
   }
 });
@@ -1151,7 +1163,7 @@ document.addEventListener('keydown', (e) => {
 document.addEventListener('keyup', (e) => {
   const key = KEYMAP[e.key];
   if (!key) return;
-  buttonFor(key).classList.remove('pressed');
+  buttonFor(key)?.classList.remove('pressed');
   release(key);
 });
 
@@ -1163,6 +1175,7 @@ window.addEventListener('blur', () => {
 
 Promise.all([loadPrefs(), loadGames()]).then(([saved]) => {
   Object.assign(prefs, saved);
+  if (STANDALONE) prefs.mode = 'game';
   // A ROM removed in another tab, or null from before eject existed.
   if (prefs.game == null) prefs.game = '';
   if (prefs.game && !allGames().some((g) => g.file === prefs.game)) prefs.game = BUILT_IN[0].file;

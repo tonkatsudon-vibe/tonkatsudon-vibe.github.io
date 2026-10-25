@@ -34,11 +34,11 @@
       <iframe id="emu" title="Game" tabindex="-1" allow="autoplay *; gamepad *"></iframe>
       <!-- What the boot ROM shows with no cartridge in: the logo reads back as
            a black bar. Drawn by popup.js; clicking it loads a ROM. -->
-      <button class="no-game" id="no-game" title="Load a .gb / .gbc ROM" hidden>
+      <button class="no-game" id="no-game" title="Load a .gb / .gbc / .gba ROM" hidden>
         <canvas id="no-game-art" width="498" height="280"></canvas>
         <small>Click to load a ROM</small>
       </button>
-      <input type="file" id="rom-input" accept=".gb,.gbc,.zip" hidden>
+      <input type="file" id="rom-input" accept=".gb,.gbc,.gba,.zip" hidden>
       <!-- A short message over the bottom of the screen, e.g. why a ROM didn't load. -->
       <div class="toast" id="toast" role="status" hidden></div>
       <!-- The web build starts switched off: a page may only make sound after a
@@ -110,9 +110,9 @@
   </div>
 
   <!-- Web page only: the controls people reach for most, under the shell. It
-       fades away when idle. popup.js moves the Web and Haptics buttons in here. -->
+       fades away when idle. popup.js moves the Haptics button in here. -->
   <div class="controls" id="controls" hidden>
-    <button class="primary" id="load-rom" title="Load a .gb, .gbc or zipped ROM from this device">Load ROM</button>
+    <button class="primary" id="load-rom" title="Load a .gb, .gbc, .gba or zipped ROM from this device">Load ROM</button>
     <button id="skin-next" title="Next skin" aria-label="Next skin"><span class="dot" id="skin-dot"></span>Skin</button>
     <button id="more" title="Games, saves, boot animation and full screen">More</button>
     <button class="icon" id="reload" title="Reload with the latest version (your game is saved first)" aria-label="Reload">
